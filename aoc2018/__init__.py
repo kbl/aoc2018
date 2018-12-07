@@ -15,4 +15,4 @@ def readlines():
         sys.exit(1)
 
     with open(args.input_file_path) as f:
-        return f.readlines()
+        return map(lambda x: x.strip(), f.readlines())
