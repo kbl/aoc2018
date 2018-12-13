@@ -3,7 +3,7 @@ import os
 import sys
 
 
-def readlines():
+def readlines(strip=True):
     parser = argparse.ArgumentParser()
     parser.add_argument('input_file_path')
 
@@ -15,4 +15,6 @@ def readlines():
         sys.exit(1)
 
     with open(args.input_file_path) as f:
-        return map(lambda x: x.strip(), f.readlines())
+        if strip:
+            return map(lambda x: x.strip(), f.readlines())
+        return map(lambda x: x, f.readlines())
