@@ -2,7 +2,6 @@ from collections import namedtuple
 from aoc2018 import readlines
 
 
-
 def parse(lines):
     min_y = 100000000
     max_y = -10000000
@@ -53,7 +52,7 @@ class Drop(Cords):
         b = self.below()
         if b in water:
             existing_surface = water[b]
-            existing_surface.input_streams.append(self)
+            existing_surface.input_streams.append(b)
             return None, existing_surface
         if b in clay:
             c = Cords(*self)
@@ -75,7 +74,7 @@ class Surface:
             self.input_streams = drop
 
     def __str__(self):
-        return 'Surface(%s, %s)' % (self.left, self.right)
+        return 'Surface(%s, %s, %s)' % (self.left, self.right, self.input_streams)
 
     __repr__ = __str__
 
@@ -137,6 +136,8 @@ class Surface:
         surfaces = []
         for s in self.input_streams:
             above = s.above()
+            if above in water:
+                continue
             point = Cords(*above)
             s = Surface(point, point, above)
             water[point] = s
@@ -157,12 +158,13 @@ class Clay:
 
         while drops:
             drop = drops.pop()
-            if drop.y > self.maxy:
+            if drop in self.water_streams or drop.y > self.maxy:
                 continue
+
+            self.water_streams.add(drop)
             new_drop, surface = drop.drip(self.clay, self.water)
             if new_drop:
                 drops.append(new_drop)
-                self.water_streams.add(new_drop)
                 continue
 
             new_drops = surface.flow(self.clay, self.water)
@@ -179,14 +181,24 @@ class Clay:
                             surfaces.append(raised_surface)
 
             drops.extend(new_drops)
-            self.water_streams.update(new_drops)
 
-        return sum([1 for (x, y) in set(self.water).union(self.water_streams) if y >= self.miny and y <= self.maxy])
+        return self.stats()
+
+    def stats(self):
+        water_in_containers = set()
+        for surface in self.water.values():
+            if not surface.flow(self.clay, self.water):
+                water_in_containers.update(surface)
+        water_in_containers = len(water_in_containers)
+
+        all_water = sum([1 for (x, y) in set(self.water).union(self.water_streams) if y >= self.miny and y <= self.maxy])
+
+        return all_water, water_in_containers
 
     def __str__(self):
-        minx = miny = None
+        minx = maxx = None
         water = set(self.water).union(self.water_streams)
-        for x, _ in self.clay.union(water):
+        for x, y in self.clay.union(water):
             if minx is None:
                 minx = x
                 maxx = x
@@ -194,9 +206,13 @@ class Clay:
             minx = min(minx, x)
             maxx = max(maxx, x)
 
-        rows = []
+        rows = [
+            '     ' + ''.join([str(x // 100) for x in range(minx, maxx + 1)]),
+            '     ' + ''.join([str((x % 100) // 10) for x in range(minx, maxx + 1)]),
+            '     ' + ''.join([str(x % 10) for x in range(minx, maxx + 1)]),
+        ]
         for y in range(0, self.maxy + 1):
-            row = []
+            row = ['%4d ' % y]
             for x in range(minx, maxx + 1):
                 cords = (x, y)
                 if cords == (500, 0):
@@ -208,10 +224,9 @@ class Clay:
                 elif cords in self.water_streams:
                     row.append('|')
                 else:
-                    row.append('.')
+                    row.append(' ')
             rows.append(''.join(row))
         return '\n'.join(rows)
-
 
 
 lines = """x=495, y=2..7
@@ -228,21 +243,5 @@ if __name__ == '__main__':
     import doctest
     print(doctest.testmod())
 
-    # 1230 too low
-    # 2003 too low
-    # 4000 too low
-    # 38456
-    clay, miny, maxy = parse(readlines())
-    clay = Clay(clay, miny, maxy)
-    solution = clay.solve()
-
-
-    minx = 10000
-    maxx = 0
-    c = clay.clay
-    for (x, y) in c:
-        minx = min(minx, x)
-        maxx = max(maxx, x)
-
-    print(clay)
-    print(solution)
+    clay = Clay(*parse(readlines()))
+    print(clay.solve())

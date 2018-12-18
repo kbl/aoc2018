@@ -91,7 +91,7 @@ def test_drip():
 
 def test_multiple_drips():
     representation = """
-    .....
+    .v..v
     ~~~~~"""
     clay = set()
     water = parse_water(representation)
@@ -103,11 +103,11 @@ def test_multiple_drips():
 
     _, new_surface = drop1.drip(clay, water)
     assert surface == new_surface
-    assert surface.input_streams == [drop1]
+    assert surface.input_streams == [drop1.below()]
 
     _, new_surface = drop2.drip(clay, water)
     assert surface == new_surface
-    assert surface.input_streams == [drop1, drop2]
+    assert surface.input_streams == [drop1.below(), drop2.below()]
 
 
 def test_drip_on_clay():
@@ -271,10 +271,13 @@ def test_str():
     ...#...""")
     clay.solve()
     print(clay)
-    assert str(clay) == """.+.
-.|.
-|~|
-|#|"""
+    assert str(clay) == """   455
+   900
+   901
+ 0 .+.
+ 1 .|.
+ 2 |~|
+ 3 |#|"""
 
 
 def test_basic_solve():
@@ -430,56 +433,47 @@ def test_several_sources2():
     assert solution == water
 
 
-#def test_container_with_empty_box():
-#    clay, water = parse("""
-#    ......+...
-#    ......~...
-#    ....****#.
-#    .****#**#.
-#    .*#**#**#.
-#    .*#*****#.
-#    .*#######.""")
-#    solution = clay.solve()
-#    print(clay)
-#    assert solution == water
-#
-#
-# def test_container_with_box2():
-#     clay, water = parse("""
-#     ....+........
-#     ...~~~.......
-#     ...*#*.......
-#     ...*.*.......
-#     .************
-#     .*#********#*
-#     .*#********#*
-#     .*#****###*#*
-#     .*#****#.#*#*
-#     .*#****###*#*
-#     .*#********#*
-#     .*##########*.""")
-#     solution = clay.solve()
-#     print(clay)
-#     assert solution == water
-#
-# # ...+...
-# # ...v...
-# # .~~~~~#
-# # #~#~#~#
-# # #~###~#
-# # #~~~~~#
-# # #######
-#
-#
-# # def test_container_with_box3():
-# #     clay, water = parse("""
-# #     .....+....
-# #     ..........
-# #     .*******#.
-# #     .*#*#*#*#.
-# #     .*#*###*#.
-# #     .*#*****#.
-# #     .*#######.""")
-# #     solution = clay.solve()
-# #     print(clay)
-# #     assert solution == water
+def test_container_with_empty_box():
+    clay, water = parse("""
+    ......+...
+    ......~...
+    ....****#.
+    .****#**#.
+    .*#**#**#.
+    .*#*****#.
+    .*#######.""")
+    solution = clay.solve()
+    print(clay)
+    assert solution == water
+
+
+def test_container_with_box2():
+    clay, water = parse("""
+    ....+........
+    ...~~~.......
+    ...*#*.......
+    ...*.*.......
+    .************
+    .*#********#*
+    .*#********#*
+    .*#****###*#*
+    .*#****#.#*#*
+    .*#****###*#*
+    .*#********#*
+    .*##########*.""")
+    solution = clay.solve()
+    print(clay)
+    assert solution == water
+
+def test_container_with_box3():
+    clay, water = parse("""
+    .....+....
+    ..........
+    .*******#.
+    .*#*#*#*#.
+    .*#*###*#.
+    .*#*****#.
+    .*#######.""")
+    solution = clay.solve()
+    print(clay)
+    assert solution == water
