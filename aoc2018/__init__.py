@@ -16,5 +16,5 @@ def readlines(strip=True):
 
     with open(args.input_file_path) as f:
         if strip:
-            return map(lambda x: x.strip(), f.readlines())
-        return map(lambda x: x, f.readlines())
+            return [x.strip() for x in f.readlines()]
+        return f.readlines()
