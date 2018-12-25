@@ -1,16 +1,16 @@
 from collections import namedtuple, Counter, defaultdict
 import re
 from aoc2018 import readlines
-from aoc2018.day23e1 import LINE_REGEX, Cords, Nanobot as N
+from aoc2018.day23e1 import LINE_REGEX, Cords as C, Nanobot as N
 
 
-def parse(lines):
-    nanobots = []
-    for l in lines:
-        g = LINE_REGEX.match(l).groups()
-        nanobots.append(Nanobot(Cords(*map(int, g[:3])), int(g[3])))
-    return nanobots
+class Cords(C):
+    def add(self, other):
+        return Cords(self.x + other.x, self.y + other.y, self.z + other.z)
 
+
+def dummy(cords):
+    return Nanobot(cords, 0)
 
 
 class Nanobot(N):
@@ -24,9 +24,32 @@ class Nanobot(N):
         True
         >>> Nanobot(Cords(0, 0, 0), 1).intersects(Nanobot(Cords(3, 0, 0), 1))
         False
+        >>> Nanobot(Cords(0, 0, 0), 1).intersects(Nanobot(Cords(1, 0, 0), 0))
+        True
         """
         distance = self.cords.distance(other.cords)
         return self.radius + other.radius >= distance
+
+    @property
+    def corners(self):
+        """
+        >>> Nanobot(Cords(0, 0, 0), 3).corners
+        ((Cords(x=-3, y=0, z=0), Cords(x=3, y=0, z=0)), (Cords(x=0, y=-3, z=0), Cords(x=0, y=3, z=0)), (Cords(x=0, y=0, z=-3), Cords(x=0, y=0, z=3)))
+        """
+        return (
+            (
+                self.cords.add(Cords(-self.radius, 0, 0)),
+                self.cords.add(Cords(self.radius, 0, 0))
+            ),
+            (
+                self.cords.add(Cords(0, -self.radius, 0)),
+                self.cords.add(Cords(0, self.radius, 0))
+            ),
+            (
+                self.cords.add(Cords(0, 0, -self.radius)),
+                self.cords.add(Cords(0, 0, self.radius))
+            )
+        )
 
 
 # class Cuboid(namedtuple('metacuboid', ['left', 'right'])):
@@ -49,6 +72,19 @@ class Nanobot(N):
 #         nz + nr
 # 
 #         return False
+
+
+def how_many(bots, axis_range, which_cord):
+    left, right = axis_range
+    in_range = 0
+    for b in bots:
+        bleft = which_cord(b) - b.radius
+        bright = which_cord(b) + b.radius
+        bot_range = (bleft, bright)
+        r1, r2 = sorted([axis_range, bot_range])
+        if r1[1] >= r2[0]:
+            in_range += 1
+    return in_range
 
 
 def clusters(bots, which_cord):
@@ -108,48 +144,132 @@ def _findminmax(nanobots):
 
 def solve(lines):
     nanobots = parse(lines)
-    (minx, maxx), (miny, maxy), (minz, maxz) = _findminmax(nanobots)
+
+    xminus = []
+    xplus = []
+
+    yminus = []
+    yplus = []
+
+    zminus = []
+    zplus = []
+
+    for n in nanobots:
+        xaxis, yaxis, zaxis = n.corners
+        xminus.append(xaxis[1])
+        xplus.append(xaxis[0])
+
+        yminus.append(yaxis[1])
+        yplus.append(yaxis[0])
+
+        zminus.append(zaxis[1])
+        zplus.append(zaxis[0])
+
+    xminus = sorted(xminus, reverse=True)
+    xmplus = sorted(xplus)
+
+    yminus = sorted(yminus, reverse=True)
+    ymplus = sorted(yplus)
+
+    zminus = sorted(zminus, reverse=True)
+    zmplus = sorted(zplus)
+
+    zero = Cords(0, 0, 0)
+
+    leftovers = set(nanobots)
+
+    minx = xminus.pop()
+    maxx = xplus.pop()
+
+    miny = yminus.pop()
+    maxy = yplus.pop()
+
+    minz = zminus.pop()
+    maxz = zplus.pop()
+
+    print(how_many(nanobots, (minx.x, maxx.x), lambda b: b.cords.x))
+
+    while xminus and xplus:
+        x = how_many(nanobots, (xminus[-1].x, maxx.x), lambda b: b.cords.x)
+        y = how_many(nanobots, (minx.x, xplus[-1].x), lambda b: b.cords.x)
+
+        if x == y:
+            d1 = xminus[-1].distance(zero)
+            d2 = xplus[-1].distance(zero)
+            if d1 == d2:
+                raise Exception('!')
+            if d1 < d2:
+                minx = xminus.pop()
+            else:
+                maxx = xplus.pop()
+        if x > y:
+            minx = xminus.pop()
+        else:
+            maxx = xplus.pop()
+
+    while yminus and yplus:
+        x = how_many(nanobots, (yminus[-1].y, maxy.y), lambda b: b.cords.y)
+        y = how_many(nanobots, (miny.y, yplus[-1].y), lambda b: b.cords.y)
+
+        if x == y:
+            d1 = yminus[-1].distance(zero)
+            d2 = yplus[-1].distance(zero)
+            if d1 == d2:
+                raise Exception('!')
+            if d1 < d2:
+                miny = yminus.pop()
+            else:
+                maxy = yplus.pop()
+        if x > y:
+            miny = yminus.pop()
+        else:
+            maxy = yplus.pop()
+
+    print(1)
+
+    while zminus and zplus:
+        print(2)
+        x = how_many(nanobots, (zminus[-1].z, maxz.z), lambda b: b.cords.z)
+        y = how_many(nanobots, (minz.z, zplus[-1].z), lambda b: b.cords.z)
+
+        if x == y:
+            d1 = zminus[-1].distance(zero)
+            d2 = zplus[-1].distance(zero)
+            if d1 == d2:
+                raise Exception('!')
+            if d1 < d2:
+                minz = zminus.pop()
+            else:
+                maxz = zplus.pop()
+        if x > y:
+            minz = zminus.pop()
+        else:
+            maxz = zplus.pop()
 
     print(minx, maxx)
-    for c, b in clusters(nanobots, lambda b: b.cords.z).items():
-        print(c, len(b))
-    for c, b in clusters(nanobots, lambda b: b.cords.y).items():
-        print(c, len(b))
-    for c, b in clusters(nanobots, lambda b: b.cords.x).items():
-        print(c, len(b))
-
-    bots = set(nanobots)
-    to_check = list(nanobots)
-
-    intersections = defaultdict(list)
-
-    while to_check:
-        being_checked = to_check.pop()
-        how_many = len([b for b in bots if b != being_checked and being_checked.intersects(b)])
-        intersections[how_many].append(being_checked)
-
-    the_most_intersections = max(intersections.keys())
-    print(the_most_intersections)
-    print(intersections[the_most_intersections])
-
-    return 0
+    print(miny, maxy)
+    print(minz, maxz)
 
 
-lines = """pos=<0,0,0>, r=4
-pos=<1,0,0>, r=1
-pos=<4,0,0>, r=3
-pos=<0,2,0>, r=1
-pos=<0,5,0>, r=3
-pos=<0,0,3>, r=1
-pos=<1,1,1>, r=1
-pos=<1,1,2>, r=1
-pos=<1,3,1>, r=1""".split('\n')
+def parse(lines):
+    nanobots = []
+    for l in lines:
+        g = LINE_REGEX.match(l).groups()
+        nanobots.append(Nanobot(Cords(*map(int, g[:3])), int(g[3])))
+    return nanobots
+
+
+lines = """pos=<10,12,12>, r=2
+pos=<12,14,12>, r=2
+pos=<16,12,12>, r=4
+pos=<14,14,14>, r=6
+pos=<50,50,50>, r=200
+pos=<10,10,10>, r=5""".split('\n')
 
 
 if __name__ == '__main__':
     import doctest
     print(doctest.testmod())
 
-
-    print(solve(readlines()))
-    #print(solve(lines))
+    #print(solve(readlines()))
+    print(solve(lines))
