@@ -10,6 +10,7 @@ IMMUNE_SYSTEM = 0
 INFECTION = 1
 
 
+
 class Group:
     def __init__(self, number, group_type, unit_count, unit_hit_points, attack_type, unit_power, initiative, weak_to, immune_to):
         if weak_to is None:
@@ -48,10 +49,9 @@ class Group:
         if imwee:
             imwee = '(%s) ' % imwee
 
-        return "%d %d units each with %d hit points %swith an attack that does %d %s damage at initiative %d" % (self.effective_power, self.unit_count, self.unit_hit_points, imwee, self.unit_power, self.attack_type, self.initiative)
+        return "%d units each with %d hit points %swith an attack that does %d %s damage at initiative %d" % (self.unit_count, self.unit_hit_points, imwee, self.unit_power, self.attack_type, self.initiative)
 
     __repr__ = __str__
-
 
     @property
     def effective_power(self):
@@ -61,11 +61,11 @@ class Group:
     def hit_points(self):
         return int(self.unit_count * self.unit_hit_points)
 
-    @staticmethod
-    def parse(number, group_type, line):
+    @classmethod
+    def parse(cls, number, group_type, line):
         """
         >>> Group.parse(0, INFECTION, "7550 units each with 8773 hit points (immune to radiation; weak to fire, slashing) with an attack that does 11 radiation damage at initiative 11")
-        83050 7550 units each with 8773 hit points (immune to radiation; weak to fire, slashing) with an attack that does 11 radiation damage at initiative 11
+        7550 units each with 8773 hit points (immune to radiation; weak to fire, slashing) with an attack that does 11 radiation damage at initiative 11
         """
         LINE_REGEX = re.compile("(\d+) units each with (\d+) hit points ?(?:\((.+)\))? with an attack that does (\d+) (\w+) damage at initiative (\d+)")
         unit_count, hit_points, imm_wee, power, attack_type, initiative = LINE_REGEX.match(line).groups()
@@ -77,7 +77,7 @@ class Group:
 
         immune_to = []
         weak_to = []
-        
+
         for data in imm_wee.split('; '):
             if not data:
                 continue
@@ -86,38 +86,74 @@ class Group:
             else:
                 weak_to = data[len('weak to '):].split(', ')
 
-        return Group(number, group_type, unit_count, hit_points, attack_type, power, initiative, weak_to, immune_to)
+        return cls(number, group_type, unit_count, hit_points, attack_type, power, initiative, weak_to, immune_to)
 
     def pick_target(self, enemies):
+        enemies = [e for e in enemies if self.estimate_damage(e)]
         if enemies:
-            if self.group_type == IMMUNE_SYSTEM:
-                t = 'Immune System'
-            else:
-                t = 'Infection'
-            for e in enemies:
-                print(t, '%d group would deal defending group %d %d damage' % (self.number, e.number, self.estimate_damage(e)))
-            return sorted(enemies, key=lambda e: (self.estimate_damage(e), -e.initiative))[-1]
+            return sorted(enemies, key=lambda e: (self.estimate_damage(e), e.effective_power, e.initiative))[-1]
 
     def estimate_damage(self, enemy):
         ep = self.effective_power
         if self.attack_type in enemy.weak_to:
-            ep *= 2
+            return ep * 2
         if self.attack_type in enemy.immune_to:
-            ep /= 2
-        return int(ep)
+            return None
+        return ep
 
     def attack(self, enemy):
-        """
-        >>> Group(1, IMMUNE_SYSTEM, 4485, 2961, 'slashing', 12, 4, ['fire', 'cold'], ['radiation'])
-    
-        number, group_type, unit_count, unit_hit_points, attack_type, unit_power, initiative, weak_to, immune_to):
-        """
         damage = self.estimate_damage(enemy)
         if damage > enemy.hit_points:
             enemy.unit_count = 0
         else:
-            hit_points_left = enemy.hit_points % damage
-            enemy.unit_count = int(math.ceil(hit_points_left / enemy.unit_hit_points))
+            enemy.unit_count = math.ceil((enemy.hit_points - damage) / enemy.unit_hit_points)
+
+
+class Battle:
+    def __init__(self, immune_system, infection):
+        self._immune_system = sorted(immune_system, key=lambda g: (g.effective_power, g.initiative), reverse=True)
+        self._infection = sorted(infection, key=lambda g: (g.effective_power, g.initiative), reverse=True)
+        self.targets = {}
+
+    @property
+    def immune_system(self):
+        return [g for g in self._immune_system if g.unit_count > 0]
+
+    @property
+    def infection(self):
+        return [g for g in self._infection if g.unit_count > 0]
+
+    def pick_targets(self):
+        self.targets = {}
+
+        immune_system_as_target = list(self.immune_system)
+        infection_as_target = list(self.infection)
+
+        for g in self.infection:
+            t = g.pick_target(immune_system_as_target)
+            if t:
+                self.targets[g] = t
+                immune_system_as_target.remove(t)
+
+        for g in self.immune_system:
+            t = g.pick_target(infection_as_target)
+            if t:
+                self.targets[g] = t
+                infection_as_target.remove(t)
+
+    def fight(self):
+        for g in sorted(self.immune_system + self.infection, key=lambda g: (g.initiative), reverse=True):
+            if g not in self.targets:
+                continue
+            target = self.targets[g]
+            if g.group_type == IMMUNE_SYSTEM:
+                t = 'Immune System'
+            else:
+                t = 'Infection'
+
+            units_before = target.unit_count
+            g.attack(target)
+            killed = units_before - target.unit_count
 
 
 def parse(lines):
@@ -141,71 +177,31 @@ def parse(lines):
         else:
             immune_system.append(g)
     return immune_system, infection
-    
+
+
+def simulate(immune_system, infection):
+    previous_state = 0
+    while immune_system and infection:
+        battle = Battle(immune_system, infection)
+        battle.pick_targets()
+        battle.fight()
+
+        immune_system = battle.immune_system
+        infection = battle.infection
+
+        current_state = sum([g.unit_count for g in immune_system + infection])
+        if previous_state == current_state:
+            print('tie detected!')
+            break
+        previous_state = current_state
+    return immune_system, infection
+
 
 def solve(lines):
-    """
-    >>> solve([])
-    1
-    """
     immune_system, infection = parse(lines)
-    immune_system = sorted(immune_system, key=lambda g: (g.effective_power, g.initiative), reverse=True)
-    infection = sorted(infection, key=lambda g: (g.effective_power, g.initiative), reverse=True)
+    immune_system, infection = simulate(immune_system, infection)
 
-    i = 0
-    while immune_system and infection:
-        if i > 3:
-            break
-        i += 1
-        immune_system_as_target = list(immune_system)
-        infection_as_target = list(infection)
-
-        groups = list(immune_system)
-        groups.extend(infection)
-        groups = sorted(groups, key=lambda g: (g.initiative), reverse=True)
-
-
-        print('--')
-        print('Immune system:')
-        for g in immune_system:
-            print('Group %d contains %d units (%d)' % (g.number, g.unit_count, g.effective_power))
-        print('Infection:')
-        for g in infection:
-            print('Group %d contains %d units (%d)' % (g.number, g.unit_count, g.effective_power))
-        print()
-
-        targets = {}
-
-        for g in infection:
-            t = g.pick_target(immune_system_as_target)
-            targets[g] = t
-            immune_system_as_target.remove(t)
-
-        for g in immune_system:
-            t = g.pick_target(infection_as_target)
-            targets[g] = t
-            infection_as_target.remove(t)
-
-        print()
-
-        for g in groups:
-            target = targets[g]
-            if g.group_type == IMMUNE_SYSTEM:
-                t = 'Immune System'
-            else:
-                t = 'Infection'
-
-            units_before = target.unit_count
-            g.attack(target)
-            killed = units_before - target.unit_count
-            print(t, 'group %d attack defending group %d, killing %d units' % (g.number, target.number, killed))
-
-        immune_system = [g for g in groups if g.unit_count > 0 and g.group_type == IMMUNE_SYSTEM]
-        immune_system = sorted(immune_system, key=lambda g: (g.effective_power, g.initiative), reverse=True)
-        infection = [g for g in groups if g.unit_count > 0 and g.group_type == INFECTION]
-        infection = sorted(infection, key=lambda g: (g.effective_power, g.initiative), reverse=True)
-
-    return 1
+    return sum([g.unit_count for g in immune_system + infection])
 
 
 lines = """Immune System:
@@ -221,5 +217,4 @@ if __name__ == '__main__':
     import doctest
     print(doctest.testmod())
 
-    # print(solve(readlines()))
-    print(solve(lines))
+    print(solve(readlines()))
