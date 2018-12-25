@@ -85,6 +85,9 @@ class Surface:
     def __eq__(self, other):
         return list(self) == list(other)
 
+    def blocked(self, clay):
+        return self.left.left() in clay and self.right.right() in clay
+
     def flow(self, clay, water):
         while True:
             ll = self.left.left()
@@ -186,8 +189,8 @@ class Clay:
 
     def stats(self):
         water_in_containers = set()
-        for surface in self.water.values():
-            if not surface.flow(self.clay, self.water):
+        for surface in list(self.water.values()):
+            if surface.blocked(self.clay):
                 water_in_containers.update(surface)
         water_in_containers = len(water_in_containers)
 

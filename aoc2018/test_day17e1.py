@@ -8,16 +8,20 @@ def parse(representation):
     lines = [l.strip() for l in representation.split('\n') if len(l.strip())]
     x500 = lines[0].index('+')
     water = 0
+    water_in_containers = 0
     for y, row in enumerate(lines[1:], 1):
         for x, e in enumerate(row, 500 - x500):
             if e == '#':
                 clay.add((x, y))
                 miny = min(y, miny)
                 maxy = max(y, maxy)
-            if e == '*':
+            elif e == 'w':
+                water_in_containers += 1
+                water += 1
+            elif e == '*':
                 water += 1
 
-    return Clay(clay, miny, maxy), water
+    return Clay(clay, miny, maxy), (water, water_in_containers)
 
 
 def parse_symbol(representation, symbol):
@@ -46,7 +50,6 @@ def parse_water(representation, symbol='~'):
                     continue
                 else:
                     surface_left = x
-                    print('x', x)
                     previous_was_water = True
                     continue
             if previous_was_water:
@@ -68,8 +71,6 @@ def test_parse_water():
     .~~~.
     ~.~.~"""
     water = parse_water(representation)
-    for x, y in sorted(water.items(), key=lambda z: (z[0][1], z[0][0])):
-        print(x, y)
     assert len(water) == 6
     assert list(water[(1, 0)]) == list(water[(3, 0)])
     assert list(water[(1, 0)]) == [(1, 0), (2, 0), (3, 0)]
@@ -226,9 +227,6 @@ def test_flow_merge_surfaces():
 
     water[drop1].flow(clay, water)
 
-    for x, y in water.items():
-        print(x, id(y))
-
     assert id(water[drop1]) == id(water[drop2])
     assert water[drop1].input_streams == [drop1, drop2]
 
@@ -260,7 +258,7 @@ def test_parsing():
     assert (500, 3) in clay.clay
     assert clay.miny == 2
     assert clay.maxy == 3
-    assert water == 4
+    assert water == (4, 0)
 
 
 def test_str():
@@ -270,14 +268,13 @@ def test_str():
     .......
     ...#...""")
     clay.solve()
-    print(clay)
-    assert str(clay) == """   455
-   900
-   901
- 0 .+.
- 1 .|.
- 2 |~|
- 3 |#|"""
+    assert str(clay) == """     455
+     900
+     901
+   0  + 
+   1  | 
+   2 |~|
+   3 |#|"""
 
 
 def test_basic_solve():
@@ -287,7 +284,6 @@ def test_basic_solve():
     ..~~~..
     ..*#*...""")
     solution = clay.solve()
-    print(clay)
     assert solution == water
 
 
@@ -295,10 +291,9 @@ def test_basic_container():
     clay, water = parse("""
     ...+...
     .~~~~~.
-    .*#*#*.
+    .*#w#*.
     .*###*..""")
     solution = clay.solve()
-    print(clay)
     assert solution == water
 
 
@@ -307,10 +302,9 @@ def test_overflow_right():
      ...+...
      ...~...
      ..#***.
-     ..#*#*.
+     ..#w#*.
      ..###*..""")
      solution = clay.solve()
-     print(clay)
      assert solution == water
 
 
@@ -319,10 +313,9 @@ def test_overflow_left():
     ...+...
     ...~...
     .***#..
-    .*#*#..
+    .*#w#..
     .*###..""")
     solution = clay.solve()
-    print(clay)
     assert solution == water
 
 
@@ -334,7 +327,6 @@ def test_container_with_hole():
     .#**#..
     .#*##..""")
     solution = clay.solve()
-    print(clay)
     assert solution == water
 
 
@@ -343,15 +335,14 @@ def test_containers_below():
     ...+....
     ...~....
     .#****..
-    .#**#*..
-    .#**#*..
+    .#ww#*..
+    .#ww#*..
     .####*..
     .....*..
     ..*****#
-    ..*#***#
+    ..*#www#
     ..*#####""")
     solution = clay.solve()
-    print(clay)
     assert solution == water
 
 
@@ -361,14 +352,13 @@ def test_containers_below2():
     ...~....
     #.#*....
     #.#****.
-    #.#**#*
-    #.#**#*.
-    #****#*.
+    #.#ww#*
+    #.#ww#*.
+    #wwww#*.
     ######*.
     .******#
     .*######""")
     solution = clay.solve()
-    print(clay)
     assert solution == water
 
 
@@ -377,13 +367,12 @@ def test_weird_container():
     ..+......
     ..~......
     .#*******
-    .#*#***#*
-    .#*#*#*#*
-    .#*###*#*
-    .#*****#*
+    .#w#www#*
+    .#w#w#w#*
+    .#w###w#*
+    .#wwwww#*
     .#######*""")
     solution = clay.solve()
-    print(clay)
     assert solution == water
 
 
@@ -391,12 +380,11 @@ def test_weird_container2():
     clay, water = parse("""
     ..+......
     ***#.#...
-    *#*#.#.#.
-    *#*###.#.
-    *#*****#.
+    *#w#.#.#.
+    *#w###.#.
+    *#wwwww#.
     *#######.""")
     solution = clay.solve()
-    print(clay)
     assert solution == water
 
 
@@ -407,10 +395,9 @@ def test_several_sources():
     ...*#*...
     ...*.*...
     .********.
-    .*#****#*.
+    .*#wwww#*.
     .*######*.""")
     solution = clay.solve()
-    print(clay)
     assert solution == water
 
 
@@ -425,11 +412,10 @@ def test_several_sources2():
     ...***##.
     ...***...
     .*******.
-    .*#***#*.
+    .*#www#*.
     .*#####*.""")
 
     solution = clay.solve()
-    print(clay)
     assert solution == water
 
 
@@ -438,9 +424,9 @@ def test_container_with_empty_box():
     ......+...
     ......~...
     ....****#.
-    .****#**#.
-    .*#**#**#.
-    .*#*****#.
+    .****#ww#.
+    .*#ww#ww#.
+    .*#wwwww#.
     .*#######.""")
     solution = clay.solve()
     print(clay)
@@ -454,15 +440,14 @@ def test_container_with_box2():
     ...*#*.......
     ...*.*.......
     .************
-    .*#********#*
-    .*#********#*
-    .*#****###*#*
-    .*#****#.#*#*
-    .*#****###*#*
-    .*#********#*
+    .*#wwwwwwww#*
+    .*#wwwwwwww#*
+    .*#wwww###w#*
+    .*#wwww#.#w#*
+    .*#wwww###w#*
+    .*#wwwwwwww#*
     .*##########*.""")
     solution = clay.solve()
-    print(clay)
     assert solution == water
 
 def test_container_with_box3():
@@ -470,10 +455,9 @@ def test_container_with_box3():
     .....+....
     ..........
     .*******#.
-    .*#*#*#*#.
-    .*#*###*#.
-    .*#*****#.
+    .*#w#w#w#.
+    .*#w###w#.
+    .*#wwwww#.
     .*#######.""")
     solution = clay.solve()
-    print(clay)
     assert solution == water
