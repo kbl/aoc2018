@@ -33,7 +33,7 @@ def parse(lines):
         g = LINE_REGEX.match(l).groups()
         nanobots.append(Nanobot(Cords(*map(int, g[:3])), int(g[3])))
     return nanobots
-    
+
 
 def solve(lines):
     nanobots = parse(lines)

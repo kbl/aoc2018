@@ -52,39 +52,93 @@ class Nanobot(N):
         )
 
 
-# class Cuboid(namedtuple('metacuboid', ['left', 'right'])):
-#     def intersects(self, nanobot):
-#         """
-#         >>> Cuboid(Cords(-3, -3, -3), Cords(3, 3, 3)).intersects(Nanobot(Cords(0, 0, 0), 2))
-#         True
-#         >>> Cuboid(Cords(-3, -3, -3), Cords(3, 3, 3)).intersects(Nanobot(Cords(-4, -4, -4), 20))
-#         True
-# 
-#         """
-#         nx, ny, nz = nanobot.cords
-#         nr = nanobot.radius
-#         # center inside
-#         if (nx >= self.left.x and nx <= self.right.x and
-#             ny >= self.left.y and ny <= self.right.y and
-#             nz >= self.left.z and nz <= self.right.z):
-#             return True
-# 
-#         nz + nr
-# 
-#         return False
+class Cuboid:
+    def __init__(self, nanobots):
+        self.nanobots = nanobots
+        self._find_corners()
+
+    def _build_shrinking_points(self, axis_index):
+        shrinking_points = {}
+
+        zero = Cords(0, 0, 0)
+
+        for n in self.nanobots:
+            axes = n.corners
+            start, end = axes[axis_index]
+
+            for c in [n.cords, start, end]:
+                axis_value = c[axis_index]
+                if axis_value not in shrinking_points:
+                    shrinking_points[axis_value] = c
+                elif zero.distance(c) < zero.distance(shrinking_points[axis_value]):
+                    shrinking_points[axis_value] = c
+
+        return sorted(shrinking_points.values(), key=lambda c: c[axis_index], reverse=True), sorted(shrinking_points.values(), key=lambda c: c[axis_index])
+
+    def _find_corners(self):
+        self._shrinking_points = tuple([self._build_shrinking_points(i) for i in range(3)])
+        self._axes_ranges = {
+            i: (self._shrinking_points[i][0].pop(), self._shrinking_points[i][1].pop()) for i in range(3)
+        }
+
+    def _how_many(self, axis_range, which_cord):
+        left, right = axis_range
+        in_range = 0
+        for b in self.nanobots:
+            bleft = which_cord(b) - b.radius
+            bright = which_cord(b) + b.radius
+            bot_range = (bleft, bright)
+            r1, r2 = sorted([axis_range, bot_range])
+            if r1[1] >= r2[0]:
+                in_range += 1
+        return in_range
+
+    def shrink(self, axis_index):
+        zero = Cords(0, 0, 0)
+
+        meta = {0: 'x', 1: 'y', 2: 'z'}
+
+        print(meta[axis_index])
+        print([c[axis_index] for c in self._shrinking_points[axis_index][0]])
+        print([c[axis_index] for c in self._shrinking_points[axis_index][1]])
+
+        while self._shrinking_points[axis_index][0] and self._shrinking_points[axis_index][1]:
+            current_min, current_max = self._axes_ranges[axis_index]
+
+            print()
+            print(current_min, current_max)
+            how_many = self._how_many((current_min[axis_index], current_max[axis_index]), lambda b: b.cords[axis_index])
+            print('>> %s in range <%d, %d>: %d' % (meta[axis_index], current_min[axis_index], current_max[axis_index], how_many))
+
+            wannabe_left = self._shrinking_points[axis_index][0][-1]
+            wannabe_right = self._shrinking_points[axis_index][1][-1]
+
+            x = self._how_many((wannabe_left[axis_index], current_max[axis_index]), lambda b: b.cords[axis_index])
+            y = self._how_many((current_min[axis_index], wannabe_right[axis_index]), lambda b: b.cords[axis_index])
+            print('left after changing %d to %d: %d' % (current_min[axis_index], wannabe_left[axis_index], x))
+            print('right after changing %d to %d: %d' % (current_max[axis_index], wannabe_right[axis_index], y))
+
+            if x == y:
+                d1 = wannabe_left.distance(zero)
+                d2 = wannabe_right.distance(zero)
+                if d1 == d2:
+                    if wannabe_left == wannabe_right:
+                        current_min = self._shrinking_points[axis_index][0].pop()
+                    else:
+                        raise Exception('!')
+                if d1 < d2:
+                    current_min = self._shrinking_points[axis_index][0].pop()
+                else:
+                    current_max = self._shrinking_points[axis_index][1].pop()
+            if x > y:
+                current_min = self._shrinking_points[axis_index][0].pop()
+            else:
+                current_max = self._shrinking_points[axis_index][1].pop()
+            self._axes_ranges[axis_index] = (current_min, current_max)
 
 
-def how_many(bots, axis_range, which_cord):
-    left, right = axis_range
-    in_range = 0
-    for b in bots:
-        bleft = which_cord(b) - b.radius
-        bright = which_cord(b) + b.radius
-        bot_range = (bleft, bright)
-        r1, r2 = sorted([axis_range, bot_range])
-        if r1[1] >= r2[0]:
-            in_range += 1
-    return in_range
+        how_many = self._how_many((self._axes_ranges[axis_index][0][axis_index], self._axes_ranges[axis_index][1][axis_index]), lambda b: b.cords[axis_index])
+        print('%s in range <%d, %d>: %d' % (meta[axis_index], self._axes_ranges[axis_index][0][axis_index], self._axes_ranges[axis_index][1][axis_index], how_many))
 
 
 def clusters(bots, which_cord):
@@ -120,135 +174,10 @@ def clusters(bots, which_cord):
     return data
 
 
-def _findminmax(nanobots):
-    minx = maxx = None
-    miny = maxy = None
-    minz = maxz = None
-    for n in nanobots:
-        if minx is None or minx > n.cords.x - n.radius:
-            minx = n.cords.x - n.radius
-        if miny is None or miny > n.cords.y - n.radius:
-            miny = n.cords.y - n.radius
-        if minz is None or minz > n.cords.z - n.radius:
-            minz = n.cords.z - n.radius
-
-        if maxx is None or maxx < n.cords.x + n.radius:
-            maxx = n.cords.x + n.radius
-        if maxy is None or maxy < n.cords.y + n.radius:
-            maxy = n.cords.y + n.radius
-        if maxz is None or maxz < n.cords.z + n.radius:
-            maxz = n.cords.z + n.radius
-
-    return (minx, maxx), (miny, maxy), (minz, maxz)
-
-
 def solve(lines):
     nanobots = parse(lines)
-
-    xminus = []
-    xplus = []
-
-    yminus = []
-    yplus = []
-
-    zminus = []
-    zplus = []
-
-    for n in nanobots:
-        xaxis, yaxis, zaxis = n.corners
-        xminus.append(xaxis[1])
-        xplus.append(xaxis[0])
-
-        yminus.append(yaxis[1])
-        yplus.append(yaxis[0])
-
-        zminus.append(zaxis[1])
-        zplus.append(zaxis[0])
-
-    xminus = sorted(xminus, reverse=True)
-    xmplus = sorted(xplus)
-
-    yminus = sorted(yminus, reverse=True)
-    ymplus = sorted(yplus)
-
-    zminus = sorted(zminus, reverse=True)
-    zmplus = sorted(zplus)
-
-    zero = Cords(0, 0, 0)
-
-    leftovers = set(nanobots)
-
-    minx = xminus.pop()
-    maxx = xplus.pop()
-
-    miny = yminus.pop()
-    maxy = yplus.pop()
-
-    minz = zminus.pop()
-    maxz = zplus.pop()
-
-    print(how_many(nanobots, (minx.x, maxx.x), lambda b: b.cords.x))
-
-    while xminus and xplus:
-        x = how_many(nanobots, (xminus[-1].x, maxx.x), lambda b: b.cords.x)
-        y = how_many(nanobots, (minx.x, xplus[-1].x), lambda b: b.cords.x)
-
-        if x == y:
-            d1 = xminus[-1].distance(zero)
-            d2 = xplus[-1].distance(zero)
-            if d1 == d2:
-                raise Exception('!')
-            if d1 < d2:
-                minx = xminus.pop()
-            else:
-                maxx = xplus.pop()
-        if x > y:
-            minx = xminus.pop()
-        else:
-            maxx = xplus.pop()
-
-    while yminus and yplus:
-        x = how_many(nanobots, (yminus[-1].y, maxy.y), lambda b: b.cords.y)
-        y = how_many(nanobots, (miny.y, yplus[-1].y), lambda b: b.cords.y)
-
-        if x == y:
-            d1 = yminus[-1].distance(zero)
-            d2 = yplus[-1].distance(zero)
-            if d1 == d2:
-                raise Exception('!')
-            if d1 < d2:
-                miny = yminus.pop()
-            else:
-                maxy = yplus.pop()
-        if x > y:
-            miny = yminus.pop()
-        else:
-            maxy = yplus.pop()
-
-    print(1)
-
-    while zminus and zplus:
-        print(2)
-        x = how_many(nanobots, (zminus[-1].z, maxz.z), lambda b: b.cords.z)
-        y = how_many(nanobots, (minz.z, zplus[-1].z), lambda b: b.cords.z)
-
-        if x == y:
-            d1 = zminus[-1].distance(zero)
-            d2 = zplus[-1].distance(zero)
-            if d1 == d2:
-                raise Exception('!')
-            if d1 < d2:
-                minz = zminus.pop()
-            else:
-                maxz = zplus.pop()
-        if x > y:
-            minz = zminus.pop()
-        else:
-            maxz = zplus.pop()
-
-    print(minx, maxx)
-    print(miny, maxy)
-    print(minz, maxz)
+    cuboid = Cuboid(nanobots)
+    cuboid.shrink(2)
 
 
 def parse(lines):
