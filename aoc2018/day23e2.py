@@ -9,8 +9,69 @@ class Cords(C):
         return Cords(self.x + other.x, self.y + other.y, self.z + other.z)
 
 
-def dummy(cords):
-    return Nanobot(cords, 0)
+class Range(namedtuple('metaange', ['min', 'max'])):
+    def intersects(self, other):
+        """
+        >>> Range(0, 3).intersects(Range(1, 2))
+        True
+        >>> Range(0, 3).intersects(Range(1, 4))
+        True
+        >>> Range(0, 3).intersects(Range(-1, 2))
+        True
+        >>> Range(0, 3).intersects(Range(-1, 4))
+        True
+        >>> Range(0, 3).intersects(Range(3, 4))
+        True
+        >>> Range(0, 3).intersects(Range(-3, 0))
+        True
+        >>> Range(0, 3).intersects(Range(-3, -1))
+        False
+        >>> Range(0, 3).intersects(Range(4, 5))
+        False
+        """
+        a, b = sorted([self, other])
+        return a.max >= b.min
+
+    def partition(self):
+        """
+        >>> Range(0, 10).partition()
+        (Range(min=0, max=5), Range(min=6, max=10))
+        >>> Range(0, 9).partition()
+        (Range(min=0, max=4), Range(min=5, max=9))
+        >>> Range(-10, 10).partition()
+        (Range(min=-10, max=0), Range(min=1, max=10))
+        >>> Range(-10, -4).partition()
+        (Range(min=-10, max=-7), Range(min=-6, max=-4))
+        >>> Range(0, 2).partition()
+        (Range(min=0, max=1), Range(min=2, max=2))
+        >>> Range(0, 1).partition()
+        (Range(min=0, max=0), Range(min=1, max=1))
+        >>> Range(0, 0).partition()
+        (Range(min=0, max=0),)
+        """
+        if self.size == 1:
+            return (self, )
+
+        half = abs(self.max - self.min) // 2
+        return Range(self.min, self.min + half), Range(self.min + half + 1, self.max)
+
+    def merge(self, other):
+        """
+        >>> Range(0, 5).merge(Range(7, 15))
+        Range(min=0, max=15)
+        """
+        return Range(min(self.min, other.min), max(self.max, other.max))
+
+    def contains(self, value):
+        return self.min <= value and self.max >= value
+
+    @property
+    def size(self):
+        """
+        >>> Range(-10, 10).size
+        21
+        """
+        return abs(self.max - self.min) + 1
 
 
 class Nanobot(N):
@@ -31,114 +92,105 @@ class Nanobot(N):
         return self.radius + other.radius >= distance
 
     @property
+    def ranges(self):
+        """
+        >>> Nanobot(Cords(0, 1, 2), 3).ranges
+        (Range(min=-3, max=3), Range(min=-2, max=4), Range(min=-1, max=5))
+        """
+        return (
+            Range(self.cords.x - self.radius, self.cords.x + self.radius),
+            Range(self.cords.y - self.radius, self.cords.y + self.radius),
+            Range(self.cords.z - self.radius, self.cords.z + self.radius),
+        )
+        
+    @property
     def corners(self):
         """
         >>> Nanobot(Cords(0, 0, 0), 3).corners
-        ((Cords(x=-3, y=0, z=0), Cords(x=3, y=0, z=0)), (Cords(x=0, y=-3, z=0), Cords(x=0, y=3, z=0)), (Cords(x=0, y=0, z=-3), Cords(x=0, y=0, z=3)))
+        [Cords(x=-3, y=0, z=0), Cords(x=3, y=0, z=0), Cords(x=0, y=-3, z=0), Cords(x=0, y=3, z=0), Cords(x=0, y=0, z=-3), Cords(x=0, y=0, z=3)]
         """
-        return (
-            (
-                self.cords.add(Cords(-self.radius, 0, 0)),
-                self.cords.add(Cords(self.radius, 0, 0))
-            ),
-            (
-                self.cords.add(Cords(0, -self.radius, 0)),
-                self.cords.add(Cords(0, self.radius, 0))
-            ),
-            (
-                self.cords.add(Cords(0, 0, -self.radius)),
-                self.cords.add(Cords(0, 0, self.radius))
-            )
-        )
+        return [
+            self.cords.add(Cords(-self.radius, 0, 0)),
+            self.cords.add(Cords(self.radius, 0, 0)),
+            self.cords.add(Cords(0, -self.radius, 0)),
+            self.cords.add(Cords(0, self.radius, 0)),
+            self.cords.add(Cords(0, 0, -self.radius)),
+            self.cords.add(Cords(0, 0, self.radius))
+        ]
 
 
 class Cuboid:
-    def __init__(self, nanobots):
-        self.nanobots = nanobots
-        self._find_corners()
+    def __init__(self, range_x, range_y, range_z):
+        self.range_x = range_x
+        self.range_y = range_y
+        self.range_z = range_z
 
-    def _build_shrinking_points(self, axis_index):
-        shrinking_points = {}
+    @property
+    def size(self):
+        return self.range_x.size * self.range_y.size * self.range_z.size
 
+    @property
+    def ranges(self):
+        return (self.range_x, self.range_y, self.range_z)
+
+    @property
+    def corners(self):
+        corners = []
+        for x in self.range_x:
+            for y in self.range_y:
+                for z in self.range_z:
+                    corners.append(Cords(x, y, z))
+        return corners
+                    
+    @property
+    def distance(self):
         zero = Cords(0, 0, 0)
+        return min([zero.distance(c) for c in self.corners])
 
-        for n in self.nanobots:
-            axes = n.corners
-            start, end = axes[axis_index]
+    def __repr__(self):
+        return "Cuboid(%r, %r, %r)" % (self.range_x, self.range_y, self.range_z)
 
-            for c in [n.cords, start, end]:
-                axis_value = c[axis_index]
-                if axis_value not in shrinking_points:
-                    shrinking_points[axis_value] = c
-                elif zero.distance(c) < zero.distance(shrinking_points[axis_value]):
-                    shrinking_points[axis_value] = c
+    def has_in_range(self, nanobot):
+        """
+        >>> Cuboid(Range(-4, 4), Range(-4, 4), Range(-4, 4)).has_in_range(Nanobot(Cords(0, 0, 0), 3))
+        True
+        >>> Cuboid(Range(-4, 4), Range(-4, 4), Range(-4, 4)).has_in_range(Nanobot(Cords(0, 0, 0), 13))
+        True
+        >>> Cuboid(Range(-4, 4), Range(-4, 4), Range(-4, 4)).has_in_range(Nanobot(Cords(0, 0, 0), 1))
+        True
+        >>> Cuboid(Range(-4, 4), Range(-4, 4), Range(-4, 4)).has_in_range(Nanobot(Cords(7, 0, 0), 7))
+        True
+        >>> Cuboid(Range(-4, 4), Range(-4, 4), Range(-4, 4)).has_in_range(Nanobot(Cords(7, 0, 0), 7))
+        True
+        >>> Cuboid(Range(-4, 4), Range(-4, 4), Range(-4, 4)).has_in_range(Nanobot(Cords(12, 12, 12), 7))
+        False
+        """
+        for c in self.corners:
+            if nanobot.has_in_range(c):
+                return True
 
-        return sorted(shrinking_points.values(), key=lambda c: c[axis_index], reverse=True), sorted(shrinking_points.values(), key=lambda c: c[axis_index])
+        for c in nanobot.corners:
+            if self.range_x.contains(c.x) and self.range_y.contains(c.y) and self.range_z.contains(c.z):
+                return True
 
-    def _find_corners(self):
-        self._shrinking_points = tuple([self._build_shrinking_points(i) for i in range(3)])
-        self._axes_ranges = {
-            i: (self._shrinking_points[i][0].pop(), self._shrinking_points[i][1].pop()) for i in range(3)
-        }
+        return False
 
-    def _how_many(self, axis_range, which_cord):
-        left, right = axis_range
-        in_range = 0
-        for b in self.nanobots:
-            bleft = which_cord(b) - b.radius
-            bright = which_cord(b) + b.radius
-            bot_range = (bleft, bright)
-            r1, r2 = sorted([axis_range, bot_range])
-            if r1[1] >= r2[0]:
-                in_range += 1
-        return in_range
+    def how_many_in_range(self, nanobots):
+        """
+        # >>> Cuboid(Range(49401928, 49401928), Range(12058903, 12058903), Range(41374452, 41374452)).how_many_in_range([Nanobot(Cords(65950023, 59587453, 53524633), 62514381), Nanobot(Cords(94076556, 13944972, 66655558), 65325923)])
+        # 0
+        """
+        return sum([1 for n in nanobots if self.has_in_range(n)])
 
-    def shrink(self, axis_index):
-        zero = Cords(0, 0, 0)
-
-        meta = {0: 'x', 1: 'y', 2: 'z'}
-
-        print(meta[axis_index])
-        print([c[axis_index] for c in self._shrinking_points[axis_index][0]])
-        print([c[axis_index] for c in self._shrinking_points[axis_index][1]])
-
-        while self._shrinking_points[axis_index][0] and self._shrinking_points[axis_index][1]:
-            current_min, current_max = self._axes_ranges[axis_index]
-
-            print()
-            print(current_min, current_max)
-            how_many = self._how_many((current_min[axis_index], current_max[axis_index]), lambda b: b.cords[axis_index])
-            print('>> %s in range <%d, %d>: %d' % (meta[axis_index], current_min[axis_index], current_max[axis_index], how_many))
-
-            wannabe_left = self._shrinking_points[axis_index][0][-1]
-            wannabe_right = self._shrinking_points[axis_index][1][-1]
-
-            x = self._how_many((wannabe_left[axis_index], current_max[axis_index]), lambda b: b.cords[axis_index])
-            y = self._how_many((current_min[axis_index], wannabe_right[axis_index]), lambda b: b.cords[axis_index])
-            print('left after changing %d to %d: %d' % (current_min[axis_index], wannabe_left[axis_index], x))
-            print('right after changing %d to %d: %d' % (current_max[axis_index], wannabe_right[axis_index], y))
-
-            if x == y:
-                d1 = wannabe_left.distance(zero)
-                d2 = wannabe_right.distance(zero)
-                if d1 == d2:
-                    if wannabe_left == wannabe_right:
-                        current_min = self._shrinking_points[axis_index][0].pop()
-                    else:
-                        raise Exception('!')
-                if d1 < d2:
-                    current_min = self._shrinking_points[axis_index][0].pop()
-                else:
-                    current_max = self._shrinking_points[axis_index][1].pop()
-            if x > y:
-                current_min = self._shrinking_points[axis_index][0].pop()
-            else:
-                current_max = self._shrinking_points[axis_index][1].pop()
-            self._axes_ranges[axis_index] = (current_min, current_max)
-
-
-        how_many = self._how_many((self._axes_ranges[axis_index][0][axis_index], self._axes_ranges[axis_index][1][axis_index]), lambda b: b.cords[axis_index])
-        print('%s in range <%d, %d>: %d' % (meta[axis_index], self._axes_ranges[axis_index][0][axis_index], self._axes_ranges[axis_index][1][axis_index], how_many))
+    def partition(self):
+        """
+        >>> list(Cuboid(Range(0, 4), Range(2, 6), Range(4, 8)).partition())
+        [Cuboid(Range(min=0, max=2), Range(min=2, max=4), Range(min=4, max=6)), Cuboid(Range(min=0, max=2), Range(min=2, max=4), Range(min=7, max=8)), Cuboid(Range(min=0, max=2), Range(min=5, max=6), Range(min=4, max=6)), Cuboid(Range(min=0, max=2), Range(min=5, max=6), Range(min=7, max=8)), Cuboid(Range(min=3, max=4), Range(min=2, max=4), Range(min=4, max=6)), Cuboid(Range(min=3, max=4), Range(min=2, max=4), Range(min=7, max=8)), Cuboid(Range(min=3, max=4), Range(min=5, max=6), Range(min=4, max=6)), Cuboid(Range(min=3, max=4), Range(min=5, max=6), Range(min=7, max=8))]
+        """
+        for x in self.range_x.partition():
+            for y in self.range_y.partition():
+                for z in self.range_z.partition():
+                    yield Cuboid(x, y, z)
 
 
 def clusters(bots, which_cord):
@@ -176,8 +228,29 @@ def clusters(bots, which_cord):
 
 def solve(lines):
     nanobots = parse(lines)
-    cuboid = Cuboid(nanobots)
-    cuboid.shrink(2)
+
+    range_x = range_y = range_z = Range(0, 0)
+
+    for n in nanobots:
+        rx, ry, rz = n.ranges
+        range_x = rx.merge(range_x)
+        range_y = ry.merge(range_y)
+        range_z = ry.merge(range_z)
+
+
+    c = Cuboid(range_x, range_y, range_z)
+    queue = [(1000, c.size, c.distance, c)]
+
+    while queue:
+        how_many, size, distance, c = queue.pop()
+        if size == 1:
+            return distance
+        
+        for new_c in c.partition():
+            how_many = new_c.how_many_in_range(nanobots)
+            queue.append((how_many, new_c.size, new_c.distance, new_c))
+
+        queue = sorted(queue, key=lambda x: (x[0], -x[1], -x[2]))
 
 
 def parse(lines):
@@ -199,6 +272,4 @@ pos=<10,10,10>, r=5""".split('\n')
 if __name__ == '__main__':
     import doctest
     print(doctest.testmod())
-
-    #print(solve(readlines()))
-    print(solve(lines))
+    print(solve(readlines()))

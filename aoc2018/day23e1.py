@@ -7,8 +7,8 @@ LINE_REGEX = re.compile(r'pos=<(-?\d+),(-?\d+),(-?\d+)>, r=(\d+)')
 
 
 class Nanobot(namedtuple('metaanobot', ['cords', 'radius'])):
-    def hasinrange(self, other):
-        return self.cords.distance(other.cords) <= self.radius
+    def has_in_range(self, cords):
+        return self.cords.distance(cords) <= self.radius
 
 
 class Cords(namedtuple('metacords', ['x', 'y', 'z'])):
@@ -40,7 +40,7 @@ def solve(lines):
     biggest = sorted(nanobots, key=lambda n: n.radius)[-1]
     in_range = 0
 
-    return len([n for n in nanobots if biggest.hasinrange(n)])
+    return len([n for n in nanobots if biggest.has_in_range(n.cords)])
 
 
 lines = """pos=<0,0,0>, r=4
